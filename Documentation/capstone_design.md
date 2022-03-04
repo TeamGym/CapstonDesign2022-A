@@ -53,7 +53,7 @@ CCTV Manager App에서 카메라 모듈에 대한 정보를 가져올 때 쓰인
 
 여기서 사용하는 웹은 단순한 역할만 하므로 그에 적합한 Klein 라이브러리를 통해 개발하였다.
 
-'/'로 접속할 경우 RTSP Relay Server에 접속할 수 있는 포트정보와 TCP Relay Server에 접속할 수 있는 포트정보, 접근 가능한 카메라 모듈에 대한 정보를 JSON으로 클라이언트에 전달한다.
+'/'로 접속할 경우 RTSP Relay Server에 접속할 수 있는 포트정보와 TCP Relay Server에 접속할 수 있는 포트정보, 접속 가능한 카메라 모듈에 대한 정보를 JSON으로 클라이언트에 전달한다.
 
 #### RTSP Relay Server
 실시간 영상데이터를 처리할 수 있는 RTSP프로토콜을 이용하여,
@@ -64,7 +64,7 @@ CCTV Manager App에서 카메라 모듈에 대한 정보를 가져올 때 쓰인
 영상 데이터를 다루기 위해 GStreamer 프레임워크를 사용한다.
 GStreamer를 사용하면 영상 수신, 처리, 송신을 pipeline을 사용하여 간단하게 처리가 가능하다.
 
-영상 전달 및 처리하는 과정에서 레이턴시를 최대한 없애기 위해 UDP를 사용했고, 하드웨어 인코더/디코더를 사용하였다.
+영상 전달 및 처리하는 과정에서 레이턴시를 최대한 없애기 위해 영상데이터 전송은 UDP로 이루어지고, 하드웨어 인코더 및 디코더를 사용하였다.
 
 RTSP Relay Server는 카메라 모듈로부터 영상을 받아오는 RTSP Record Server와 CCTV Manager App에 영상을 전달하는 RTSP Play Server로 이루어진다.
 
@@ -77,7 +77,14 @@ TCP 소켓을 그대로 이용하기 때문에, 직접 프로토콜을 작성하
 사용자가 CCTV 관리시스템에 접근할 수 있도록 하는 애플리케이션이다.
 
 ## 문제 및 해결방안
+문제: RTSP Relay Server에서 영상 송신과 수신을 하나의 서버에서 할 경우 probe buffer event가 발생하지 않는 문제점
+  - GStreamer의 RTSP Server모듈은 서버에 접속하는 모드가 두가지로 나뉘어지는데, 클라이언트로부터 영상을 수신하는 모드(GstRtspServer.RTSPTransportMode.RECORD)와 송신하는 모드(GstRtspServer.RTSPTransportMode.PLAY)이다.
+    RTSP Relay Server의 주된 동작은 RECORD모드에 해당하는 Pipeline의 출력이 발생하면, 즉 카메라 모듈로부터 영상을 수신하면 발생하는 이벤트에 콜백 함수를 등록하여 그 함수에서 PLAY모드의 Pipeline으로 데이터를 전달하는 것이다.
+    그런데 RECORD모드의 클라이언트가 접속한 상태에서 PLAY모드의 클라이언트가 접속하자마자 콜백함수가 실행되지 않는 문제점이 발생하였다. 디버깅을 계속 해본 결과 RECORD모드의 접속 세션과 PLAY모드의 접속 세션끼리 deadlock이 발생하는 문제라는 것을 알았다.
+해결방안: RTSP Relay Server에서 RECORD모드 전용 서버와 PLAY모드 전용 서버를 분리하였다.
+
 문제: 안드로이드에서 LibVLC 딜레이 문제 해결힘듦
+  - 초기에는 안드로이드에 거의 모든 기능이 지원되는 LibVLC를 사용하여 CCTV Manager App을 구현하기로 하였다. 하지만 LibVLC자체 문제로 영상 수신시의 딜레이를 해결하기 힘들어졌다.
 해결방안: GStreamer 사용하여 해결
   - 대신 gstreamer는 안드로이드 지원이 부족하여 직접 라이브러리를 사용하는 부분은 C로 짜야하는 문제점이 있는데
     이것을 영상 처리 및 수신하는 부분은 C, UI는 Kotlin으로 작업하여 웹의 프론트와 백엔드처럼 파트를 나눠 작업함
